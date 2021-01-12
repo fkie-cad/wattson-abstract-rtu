@@ -2,7 +2,7 @@ import abc
 from typing import Union, Tuple, Any, Iterable, Set, Optional, Callable
 from threading import Event
 
-from .util import COA, IOA, control_direction_processinfo_typeIDs, typeID_to_permitted_IOs, \
+from .util import COA, IOA, control_direction_processinfo_type_ids, type_id_to_permitted_IOs, \
     sink_logger
 
 
@@ -89,19 +89,19 @@ class BackendInterface(abc.ABC):
         :param coa: The COA for the requested Information Object
         :param ioa: The IOA for the requested Information Object
         :param cot: 0 -> choose default value initialised with
-        :param type_id: != 0 -> check if returned IO is equal to allowed IOs for this ASDU typeID
-        :return: None if the datapoint is not attached or the typeID doesn't match the expected
+        :param type_id: != 0 -> check if returned IO is equal to allowed IOs for this ASDU type_id
+        :return: None if the datapoint is not attached or the type_id doesn't match the expected
             for a datapoint, otherwise query result
         """
         if not self.has_IO(coa, ioa):
             self.logger.warning(f"tried to get IO for unattached datapoint with ioa {ioa} and coa {coa}")
             return None
 
-        if not self._valid_typeID(coa, ioa, type_id):
-            stored_typeID = self.get_data_point(coa, ioa)[2]
+        if not self._valid_type_id(coa, ioa, type_id):
+            stored_type_id = self.get_data_point(coa, ioa)[2]
             self.logger.warning(f"Tried sending a get-IO query with invalid command-query-ID "
                                 f"{type_id} to dp with (coa, ioa) ({coa}, {ioa})."
-                                f" Expecting type_id {stored_typeID} for command-queries to this dp."
+                                f" Expecting type_id {stored_type_id} for command-queries to this dp."
                                 f" Not sending this query.")
             return None
 
@@ -111,13 +111,13 @@ class BackendInterface(abc.ABC):
         if res is None:
             self.logger.warning(f"Retrieving IO for attached datapoint with (coa, ioa, cot) "
                                  f"({coa}, {ioa}, {cot}) failed!")
-        elif type_id in typeID_to_permitted_IOs \
-                and res not in typeID_to_permitted_IOs[type_id]:
+        elif type_id in type_id_to_permitted_IOs \
+                and res not in type_id_to_permitted_IOs[type_id]:
             # default type_id 0 not allowed for ASDUs -> never in type_ID_to...
 
             self.logger.warning(f"Retrieved IO with invalid value {res} "
                                     f"for type_id {type_id} from dp with (coa, ioa) ({coa}, {ioa})."
-                                    f"Expecting value in {typeID_to_permitted_IOs[type_id]}.")
+                                    f"Expecting value in {type_id_to_permitted_IOs[type_id]}.")
         else:
             self.logger.debug(f"Send query {query} to datapoint with (coa, ioa, cot): "
                               f"({coa}, {ioa}, {cot}) and result {res}")
@@ -126,13 +126,13 @@ class BackendInterface(abc.ABC):
     def has_IO(self, coa: COA, ioa: IOA) -> bool:
         return coa in self.data_store and ioa in self.data_store[coa]
 
-    def set_IO(self, coa: COA, ioa: IOA, value, cot: int=0, typeID: int=0) -> Union[bool, None]:
+    def set_IO(self, coa: COA, ioa: IOA, value, cot: int=0, type_id: int=0) -> Union[bool, None]:
         """
         Overwrites IO on an attached datapoint.
         :param coa: The COA for the Information Object to be set
         :param ioa: The IOA for the Information Object to be set
         :param cot: if 0, send query with cot this datapoint was initialised with
-        :param typeID: if != 0 & command-query-type_id, check if this type_id is allowed
+        :param type_id: if != 0 & command-query-type_id, check if this type_id is allowed
                 fot this dp.
         :return: None if datapoint identified by coa-ioa is not attached to this RTU
                 or the type_id is not allowed for this datapoint,
@@ -147,20 +147,20 @@ class BackendInterface(abc.ABC):
         stored_cot = self.get_data_point(coa, ioa)[3]
         if cot == 0:
             cot = stored_cot
-        if not self._valid_typeID(coa, ioa, typeID):
-            stored_typeID = self.get_data_point(coa, ioa)[2]
+        if not self._valid_type_id(coa, ioa, type_id):
+            stored_type_id = self.get_data_point(coa, ioa)[2]
             self.logger.warning(f"Tried to send a set-IO query with invalid command-query-type_id "
-                                f"{typeID} to dp with (coa, ioa) ({coa}, {ioa})."
-                                f"Expecting type_id {stored_typeID} for command-queries to this dp."
+                                f"{type_id} to dp with (coa, ioa) ({coa}, {ioa})."
+                                f"Expecting type_id {stored_type_id} for command-queries to this dp."
                                 f"Not sending the query.")
             # only allow queries if they have the type_id dp allows just this command
             return None
 
-        if typeID in typeID_to_permitted_IOs \
-                and value not in typeID_to_permitted_IOs[typeID]:
+        if type_id in type_id_to_permitted_IOs \
+                and value not in type_id_to_permitted_IOs[type_id]:
             self.logger.warning(f"Sending a set-IO query to with invalid value {value} "
-                                f"for type_id {typeID} to dp with (coa, ioa) ({coa}, {ioa})."
-                                f"Expecting value in {typeID_to_permitted_IOs[typeID]}.")
+                                f"for type_id {type_id} to dp with (coa, ioa) ({coa}, {ioa})."
+                                f"Expecting value in {type_id_to_permitted_IOs[type_id]}.")
 
         query = self._build_IO_query(coa, ioa, cot, value)
         res = self._send_query(query)
@@ -172,23 +172,23 @@ class BackendInterface(abc.ABC):
                              f"({coa}, {ioa}, {cot}) failed!")
         return res
 
-    def set_related_IO(self, coa: COA, ioa: IOA, cot: int=0, typeID: int=0) -> Union[bool, None]:
+    def set_related_IO(self, coa: COA, ioa: IOA, cot: int=0, type_id: int=0) -> Union[bool, None]:
         """Sets the IO related to the coa-ioa identified datapoint."""
         if not self.has_IO(coa, ioa):
             self.logger.warning(f"cannot set related IO from non-attached dp with (coa, ioa)"
                                 f"({coa}, {ioa})")
         # relationships were sanitised before; related dp has to be attached
         related_dp = self.get_related_data_point(coa, ioa)
-        return self.set_IO(related_dp[0], related_dp[1], cot, typeID)
+        return self.set_IO(related_dp[0], related_dp[1], cot, type_id)
 
-    def get_related_IO(self, coa: COA, ioa: IOA, cot: int=0, typeID: int=0) -> Union[bool, None]:
+    def get_related_IO(self, coa: COA, ioa: IOA, cot: int=0, type_id: int=0) -> Union[bool, None]:
         """Gets the IO related to the coa-ioa identified datapoint."""
         if not self.has_IO(coa, ioa):
             self.logger.warning(f"cannot read related IO from non-attached dp with (coa, ioa)"
                                 f"({coa}, {ioa})")
         # relationships were sanitised before; related dp has to be attached
         related_dp = self.get_related_data_point(coa, ioa)
-        return self.get_IO(related_dp[0], related_dp[1], cot, typeID)
+        return self.get_IO(related_dp[0], related_dp[1], cot, type_id)
 
     def get_data_point(self, coa: COA, ioa: IOA, with_value=False) -> \
             Union[None, Tuple, Tuple[Tuple, Any]]:
@@ -331,7 +331,7 @@ class BackendInterface(abc.ABC):
                 return False
         return True
 
-    def _valid_typeID(self, coa: COA, ioa: IOA, typeID: int) -> Union[bool, None, int]:
+    def _valid_type_id(self, coa: COA, ioa: IOA, type_id: int) -> Union[bool, None, int]:
         """
         :return:
             None: dp not attached to RTU
@@ -343,9 +343,9 @@ class BackendInterface(abc.ABC):
         dp = self.get_data_point(coa, ioa)
         if dp is None:
             return None
-        if dp[2] in control_direction_processinfo_typeIDs \
-            and typeID in control_direction_processinfo_typeIDs:
-            return dp[2] == typeID
+        if dp[2] in control_direction_processinfo_type_ids \
+            and type_id in control_direction_processinfo_type_ids:
+            return dp[2] == type_id
         return True
 
 
